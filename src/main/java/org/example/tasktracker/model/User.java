@@ -1,5 +1,6 @@
 package org.example.tasktracker.model;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -14,11 +15,16 @@ public class User {
         private static long nextId = 1;
 
 
-        public User(String password, String email, String name) {
+        public User(String name, String email, String password) {
                 this.password = password;
                 this.email = email;
                 this.name = name;
+                this.roles = new HashSet<>();
                 this.id = nextId++;
+        }
+
+        public static void setNextId(long nextId) {
+                User.nextId = nextId;
         }
 
         // --- Getters and Setters ---

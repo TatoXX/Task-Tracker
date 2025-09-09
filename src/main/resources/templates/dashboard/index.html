@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<h2>Dashboard</h2>
+<p>Welcome, <span th:text="${user.name}"></span>!</p>
+<div>
+    <h3>Today's Tasks</h3>
+    <ul>
+        <li th:each="task : ${todayTasks}" th:text="${task.title}"></li>
+    </ul>
+</div>
+</body>
+</html>
