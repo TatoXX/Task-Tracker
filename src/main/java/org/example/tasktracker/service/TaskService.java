@@ -1,7 +1,6 @@
 package org.example.tasktracker.service;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import com.google.gson.*;
 import com.google.gson.reflect.TypeToken;
 import org.example.tasktracker.model.Task;
 
@@ -10,9 +9,12 @@ import org.springframework.stereotype.Service;
 
 import java.io.*;
 import java.lang.reflect.Type;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 
 @Service
@@ -20,47 +22,70 @@ public class TaskService {
     private List<Task> tasks = new ArrayList<>();
 
 
-
-
     //GSON
 
     private final String filename = "data/tasks.json";
 
+    private Gson getGson() {
+        return new GsonBuilder()
+                .setPrettyPrinting()
+                .registerTypeAdapter(LocalDateTime.class, (JsonSerializer<LocalDateTime>) (src, typeOfSrc, context) ->
+                        new JsonPrimitive(src.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)))
+                .registerTypeAdapter(LocalDateTime.class, (JsonDeserializer<LocalDateTime>) (json, typeOfT, context) ->
+                        LocalDateTime.parse(json.getAsString(), DateTimeFormatter.ISO_LOCAL_DATE_TIME))
+                .create();
+    }
+
+// .............................................................................................
+
+    /**
+     * Save all tasks to JSON file
+     */
     public void saveTasksToFile() {
-        Gson gson = new GsonBuilder().setPrettyPrinting().create();
-        try (Writer writer = new FileWriter(filename)) {
-            gson.toJson(tasks, writer);
-            System.out.println("Tasks saved successfully.");
+        File file = new File(filename);
+        file.getParentFile().mkdirs(); // Ensure directory exists
+        try (Writer writer = new FileWriter(file)) {
+            getGson().toJson(tasks, writer);
+            System.out.println("✅ Tasks saved successfully to: " + file.getAbsolutePath());
         } catch (IOException e) {
-            System.out.println("Failed to save tasks: " + e.getMessage());
+            System.out.println("❌ Failed to save tasks: " + e.getMessage());
         }
     }
 
-    // Load tasks from JSON file
+// .............................................................................................
+
+    /**
+     * Load tasks from JSON file
+     */
     public void loadTasksFromFile() {
         File file = new File(filename);
-        if (!file.exists()) {
-            System.out.println("No saved tasks found, starting fresh.");
+        if (!file.exists() || file.length() == 0) {
+            System.out.println("⚠️ No saved tasks found or file empty, starting fresh. Expected file at: " + file.getAbsolutePath());
+            tasks = new ArrayList<>();
             return;
         }
 
-        Gson gson = new Gson();
-        try (Reader reader = new FileReader(filename)) {
-            Type taskListType = new TypeToken<List<Task>>(){}.getType();
-            tasks = gson.fromJson(reader, taskListType);
+        try (Reader reader = new FileReader(file)) {
+            Type taskListType = new TypeToken<List<Task>>() {}.getType();
+            tasks = getGson().fromJson(reader, taskListType);
 
-            // If you have IDs and want to continue counting properly
+            if (tasks == null) {
+                tasks = new ArrayList<>();
+            }
+
+            // Update next task ID
             long maxId = tasks.stream()
                     .mapToLong(Task::getId)
                     .max()
                     .orElse(0L);
             Task.setNextId(maxId + 1);
 
-            System.out.println("Tasks loaded successfully.");
+            System.out.println("✅ Tasks loaded successfully from: " + file.getAbsolutePath());
         } catch (IOException e) {
-            System.out.println("Failed to load tasks: " + e.getMessage());
+            System.out.println("❌ Failed to load tasks: " + e.getMessage());
         }
     }
+
 
 
     public void deleteTaskById(Long id) {
@@ -116,10 +141,10 @@ public class TaskService {
     }
 
 
-    public void updateTask(int id, Task updatedTask ) {
+    public void updateTask(Long id, Task updatedTask ) {
         Task foundTask = null;
         for (Task task : tasks) {
-            if (task.getId() == id) {
+            if (Objects.equals(task.getId(), id)) {
                 foundTask = task;
                 break;
 
@@ -137,27 +162,44 @@ public class TaskService {
         }
 
     }
+    public void updateTaskFields(Long id, String title, String description) {
+        Task foundTask = null;
+        for (Task task : tasks) {
+            if (Objects.equals(task.getId(), id)) {
+                foundTask = task;
+                break;
+            }
+        }
+
+        if (foundTask != null) {
+            foundTask.setTitle(title);
+            foundTask.setDescription(description);
+            foundTask.setUpdatedAt(LocalDateTime.now()); // fixed here
+        } else {
+            System.out.println("Task with id " + id + " not found.");
+        }
+    }
+
+
 
     public void createTask(Task task) {
         task.setId((long) (tasks.size() + 1));  // simple incremental ID
         tasks.add(task);
+        saveTasksToFile();
     }
 
-    public List<Task> getTasksByUser(Long userId) {
-        // Create a new list where we will collect the matching tasks
-        List<Task> userTasks = new ArrayList<>();
+    public List<Task> getTasksByUser(User user) {
+        // Load all tasks from JSON first
+        loadTasksFromFile();
 
-        // Go through each task in our tasks list
-        for (Task task : tasks) {
-            // Check if this task belongs to the given user
-            if (task.getUser().getId().equals(userId)) {
-                // Add it to the result list
-                userTasks.add(task);
-            }
-        }
-
-        // Return the list of tasks that belong to this user
-        return userTasks;
+        // Filter tasks for this user
+        return tasks.stream()
+                .filter(task -> task.getUser().getId().equals(user.getId()))
+                .collect(Collectors.toList());
     }
+
+
+
+
 }
 

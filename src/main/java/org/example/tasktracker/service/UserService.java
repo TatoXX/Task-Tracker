@@ -228,4 +228,5 @@ public class UserService {
         }
         return false; // Email is free
     }
+
 }

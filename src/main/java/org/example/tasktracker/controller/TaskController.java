@@ -24,14 +24,7 @@ public class TaskController {
     }
 
 
-    @PostMapping
-    public String createTask(@RequestParam String title, @RequestParam(required = false, defaultValue = "false") boolean completed) {
-        Task task = new Task();
-        task.setTitle(title);
-        task.setCompleted(completed);
-        taskService.createTask(task);
-        return "redirect:/tasks";  // Redirect browser to /tasks after POST
-    }
+
     @PostMapping("/tasks")  // ← This catches requests to "/tasks" with POST method
     public String createTask(@RequestParam String title,        // ← Gets "title" from form
                              @RequestParam String description) { // ← Gets "description" from form
