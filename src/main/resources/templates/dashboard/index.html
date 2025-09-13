@@ -1,13 +1,301 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
-<body>
-<h2>Dashboard</h2>
-<p>Welcome, <span th:text="${user.name}"></span>!</p>
-<div>
-    <h3>Today's Tasks</h3>
-    <ul>
-        <li th:each="task : ${todayTasks}" th:text="${task.title}"></li>
-    </ul>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Tracker - Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .task-item {
+            transition: all 0.3s ease;
+        }
+        .task-item:hover {
+            background-color: #f8f9fa;
+            transform: translateX(5px);
+        }
+        .completed-task {
+            text-decoration: line-through;
+            opacity: 0.6;
+        }
+        .stats-card {
+            border-left: 4px solid;
+        }
+        .stats-total { border-left-color: #6c757d; }
+        .stats-pending { border-left-color: #ffc107; }
+        .stats-completed { border-left-color: #198754; }
+        .header-gradient {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+    </style>
+</head>
+<body class="bg-light">
+<!-- Header -->
+<nav class="navbar navbar-expand-lg header-gradient text-white mb-4">
+    <div class="container">
+        <a class="navbar-brand text-white fw-bold" href="#">
+            <i class="bi bi-check-circle-fill me-2"></i>Task Tracker
+        </a>
+        <div class="navbar-nav ms-auto">
+                <span class="navbar-text text-white me-3">
+                    <i class="bi bi-person-circle me-1"></i>
+                    Welcome, <span th:text="${user.name}">User</span>!
+                </span>
+            <a href="/login" class="btn btn-outline-light btn-sm">
+                <i class="bi bi-box-arrow-right me-1"></i>Logout
+            </a>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-4 mb-3">
+            <div class="card stats-card stats-total">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="card-title text-muted mb-1">Total Tasks</h6>
+                            <h3 class="mb-0" th:text="${totalTasks ?: 0}">0</h3>
+                        </div>
+                        <div class="text-muted">
+                            <i class="bi bi-list-task fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card stats-card stats-pending">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="card-title text-muted mb-1">Pending</h6>
+                            <h3 class="mb-0" th:text="${pendingTasks ?: 0}">0</h3>
+                        </div>
+                        <div class="text-warning">
+                            <i class="bi bi-clock fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card stats-card stats-completed">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="card-title text-muted mb-1">Completed</h6>
+                            <h3 class="mb-0" th:text="${completedTasks ?: 0}">0</h3>
+                        </div>
+                        <div class="text-success">
+                            <i class="bi bi-check-circle fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Add New Task -->
+        <div class="col-lg-4 mb-4">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-plus-circle me-2"></i>Add New Task
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form action="/tasks" method="post">
+                        <div class="mb-3">
+                            <label for="taskTitle" class="form-label">Task Title</label>
+                            <input type="text" class="form-control" id="taskTitle" name="title"
+                                   placeholder="Enter task title..." required maxlength="100">
+                        </div>
+                        <div class="mb-3">
+                            <label for="taskDescription" class="form-label">Description (Optional)</label>
+                            <textarea class="form-control" id="taskDescription" name="description"
+                                      rows="3" placeholder="Add task description..." maxlength="500"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-plus me-1"></i>Add Task
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Task List -->
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-list-ul me-2"></i>Your Tasks
+                    </h5>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <input type="radio" class="btn-check" name="taskFilter" id="filterAll" checked>
+                        <label class="btn btn-outline-secondary" for="filterAll">All</label>
+
+                        <input type="radio" class="btn-check" name="taskFilter" id="filterPending">
+                        <label class="btn btn-outline-warning" for="filterPending">Pending</label>
+
+                        <input type="radio" class="btn-check" name="taskFilter" id="filterCompleted">
+                        <label class="btn btn-outline-success" for="filterCompleted">Completed</label>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Task List Container -->
+                    <div id="taskList">
+                        <!-- Show message if no tasks -->
+                        <div th:if="${#lists.isEmpty(tasks)}" class="text-center py-4">
+                            <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+                            <p class="text-muted mt-3">No tasks yet. Create your first task to get started!</p>
+                        </div>
+
+                        <!-- Task Items -->
+                        <div th:each="task : ${tasks}" class="task-item border-bottom py-3"
+                             th:data-status="${task.completed ? 'completed' : 'pending'}">
+                            <div class="d-flex align-items-start">
+                                <div class="form-check me-3 mt-1">
+                                    <input type="checkbox" class="form-check-input task-checkbox"
+                                           th:checked="${task.completed}" th:data-task-id="${task.id}">
+                                </div>
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1" th:text="${task.title}"
+                                        th:class="${task.completed ? 'completed-task' : ''}">
+                                        Sample Task
+                                    </h6>
+                                    <p class="text-muted small mb-0" th:if="${task.description}"
+                                       th:text="${task.description}">Task description</p>
+                                </div>
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                            type="button" data-bs-toggle="dropdown">
+                                        <i class="bi bi-three-dots"></i>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li>
+                                            <a class="dropdown-item" href="#" th:data-task-id="${task.id}">
+                                                <i class="bi bi-pencil me-2"></i>Edit
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item text-danger" href="#"
+                                               th:data-task-id="${task.id}" onclick="deleteTask(this)">
+                                                <i class="bi bi-trash me-2"></i>Delete
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Placeholder tasks for demo (remove when you have real tasks) -->
+                    <div th:if="${#lists.isEmpty(tasks)}" class="d-none" id="placeholderTasks">
+                        <div class="task-item border-bottom py-3" data-status="pending">
+                            <div class="d-flex align-items-start">
+                                <div class="form-check me-3 mt-1">
+                                    <input type="checkbox" class="form-check-input">
+                                </div>
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1">Complete project documentation</h6>
+                                    <p class="text-muted small mb-0">Write comprehensive README and API documentation</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Custom JavaScript -->
+<script>
+    // Task filtering
+    document.querySelectorAll('input[name="taskFilter"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            const filter = this.id.replace('filter', '').toLowerCase();
+            const tasks = document.querySelectorAll('.task-item');
+
+            tasks.forEach(task => {
+                const status = task.dataset.status;
+                if (filter === 'all' || status === filter) {
+                    task.style.display = 'block';
+                } else {
+                    task.style.display = 'none';
+                }
+            });
+        });
+    });
+
+    // Task completion toggle
+    document.querySelectorAll('.task-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const taskId = this.dataset.taskId;
+            const isCompleted = this.checked;
+
+            // Update task status via AJAX (you'll need to implement the endpoint)
+            fetch(`/tasks/${taskId}/toggle`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ completed: isCompleted })
+            })
+                .then(response => {
+                    if (response.ok) {
+                        // Update UI
+                        const taskItem = this.closest('.task-item');
+                        const taskTitle = taskItem.querySelector('h6');
+
+                        taskItem.dataset.status = isCompleted ? 'completed' : 'pending';
+
+                        if (isCompleted) {
+                            taskTitle.classList.add('completed-task');
+                        } else {
+                            taskTitle.classList.remove('completed-task');
+                        }
+
+                        // Refresh stats (you might want to update without page refresh)
+                        setTimeout(() => location.reload(), 500);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating task:', error);
+                    // Revert checkbox state
+                    this.checked = !isCompleted;
+                });
+        });
+    });
+
+    // Delete task function
+    function deleteTask(element) {
+        if (confirm('Are you sure you want to delete this task?')) {
+            const taskId = element.dataset.taskId;
+
+            fetch(`/tasks/${taskId}`, {
+                method: 'DELETE'
+            })
+                .then(response => {
+                    if (response.ok) {
+                        element.closest('.task-item').remove();
+                        // Refresh stats
+                        setTimeout(() => location.reload(), 500);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting task:', error);
+                    alert('Error deleting task. Please try again.');
+                });
+        }
+    }
+</script>
 </body>
 </html>

@@ -75,15 +75,15 @@ public class TaskService {
         }
         if (deletedTask != null) {
             tasks.remove(deletedTask);
-            System.out.println("Student with id " + id + " deleted successfully.");
+            System.out.println("Task with id " + id + " deleted successfully.");
         } else {
-            System.out.println("Provided Id is wrong or student is already deleted.");
+            System.out.println("Provided Id is wrong or task is already deleted.");
         }
 
 
     }
 
-    public Task findStudentById(Long id) {
+    public Task findTaskById(Long id) {
         Task foundTask = null;
         for (Task task : tasks) {
             if (Objects.equals(task.getId(), id)) {
@@ -97,7 +97,7 @@ public class TaskService {
 
 
         } else {
-            System.out.println("Student with id " + id + " not found.");
+            System.out.println("Task with id " + id + " not found.");
 
         }
         return foundTask;
@@ -106,7 +106,7 @@ public class TaskService {
 
     public List<Task> getAllTasks() {
         if (tasks.isEmpty()) {
-            System.out.println("No students to display.");
+            System.out.println("No tasks to display.");
             return null;
         }
         for (Task task : tasks) {
@@ -133,7 +133,7 @@ public class TaskService {
             foundTask.setUpdatedAt(updatedTask.getUpdatedAt());
 
         }else{
-            System.out.println("Student with id " + id + " not found.");
+            System.out.println("Task with id " + id + " not found.");
         }
 
     }
