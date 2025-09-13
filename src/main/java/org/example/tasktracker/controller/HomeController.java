@@ -27,6 +27,7 @@ public class HomeController {
         this.taskService = taskService;
     }
 
+
     @GetMapping("/home")
     public String home(Model model, HttpSession session) {
         User loggedUser = (User) session.getAttribute("user");
@@ -36,15 +37,22 @@ public class HomeController {
         }
         model.addAttribute("user", loggedUser);
 
-
         // Load tasks for this user
         List<Task> userTasks = taskService.getTasksByUser(loggedUser);
         model.addAttribute("tasks", userTasks);
 
+        // === COUNTS ===
+        long totalTasks = userTasks.size();
+        long completedTasks = userTasks.stream().filter(Task::isCompleted).count();
+        long pendingTasks = totalTasks - completedTasks;
 
+        model.addAttribute("totalTasks", totalTasks);
+        model.addAttribute("completedTasks", completedTasks);
+        model.addAttribute("pendingTasks", pendingTasks);
 
         return "dashboard/index"; // show dashboard
     }
+
 
     @PostMapping("/home/add-task")
     public String addTask(@RequestParam String title,
@@ -89,6 +97,18 @@ public class HomeController {
         taskService.saveTasksToFile();
         return "redirect:/home";
     }
+
+    @GetMapping("/home/toggle-task/{id}")
+    public String toggleTask(@PathVariable Long id) {
+        Task task = taskService.findTaskById(id);
+
+        // Flip completed flag
+        task.setCompleted(!task.isCompleted());
+        taskService.saveTasksToFile();
+
+        return "redirect:/home";
+    }
+
 
 
 
