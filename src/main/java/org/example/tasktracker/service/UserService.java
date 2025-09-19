@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import java.io.*;
 import java.lang.reflect.Type;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,22 +37,54 @@ public class UserService {
         loadUsersFromFile();
     }
 
-    //  .............................................................................................
+    // .............................................................................................
 
     /**
-     * Create Gson instance that can handle LocalDateTime serialization/deserialization
+     * Create Gson instance with custom adapters for LocalDateTime and LocalDate
      */
     private Gson getGson() {
         return new GsonBuilder()
                 .setPrettyPrinting()
-                .registerTypeAdapter(LocalDateTime.class, (JsonSerializer<LocalDateTime>) (src, typeOfSrc, context) ->
-                        new JsonPrimitive(src.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)))
-                .registerTypeAdapter(LocalDateTime.class, (JsonDeserializer<LocalDateTime>) (json, typeOfT, context) ->
-                        LocalDateTime.parse(json.getAsString(), DateTimeFormatter.ISO_LOCAL_DATE_TIME))
+                .registerTypeAdapter(LocalDateTime.class, new LocalDateTimeAdapter())
+                .registerTypeAdapter(LocalDate.class, new LocalDateAdapter())
                 .create();
     }
 
-    //  .............................................................................................
+    /**
+     * Custom adapter for LocalDateTime
+     */
+    private static class LocalDateTimeAdapter implements JsonSerializer<LocalDateTime>, JsonDeserializer<LocalDateTime> {
+        private final DateTimeFormatter formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+
+        @Override
+        public JsonElement serialize(LocalDateTime src, Type typeOfSrc, JsonSerializationContext context) {
+            return new JsonPrimitive(src.format(formatter));
+        }
+
+        @Override
+        public LocalDateTime deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
+            return LocalDateTime.parse(json.getAsString(), formatter);
+        }
+    }
+
+    /**
+     * Custom adapter for LocalDate
+     */
+    private static class LocalDateAdapter implements JsonSerializer<LocalDate>, JsonDeserializer<LocalDate> {
+        private final DateTimeFormatter formatter = DateTimeFormatter.ISO_LOCAL_DATE;
+
+        @Override
+        public JsonElement serialize(LocalDate src, Type typeOfSrc, JsonSerializationContext context) {
+            return new JsonPrimitive(src.format(formatter));
+        }
+
+        @Override
+        public LocalDate deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
+            return LocalDate.parse(json.getAsString(), formatter);
+        }
+    }
+
+    // .............................................................................................
 
     /**
      * Save all users to JSON file
@@ -59,18 +92,20 @@ public class UserService {
     public void saveUsersToFile() {
         File file = new File(filename);
         file.getParentFile().mkdirs(); // Ensure directory exists
+
         try (Writer writer = new FileWriter(file)) {
             getGson().toJson(users, writer);
             System.out.println("✅ Users saved successfully to: " + file.getAbsolutePath());
         } catch (IOException e) {
             System.out.println("❌ Failed to save users: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
-    //  .............................................................................................
+    // .............................................................................................
 
     /**
-     * Load users from JSON file
+     * Load users from JSON file with proper error handling
      */
     public void loadUsersFromFile() {
         File file = new File(filename);
@@ -82,10 +117,14 @@ public class UserService {
 
         try (Reader reader = new FileReader(file)) {
             Type userListType = new TypeToken<List<User>>() {}.getType();
-            users = getGson().fromJson(reader, userListType);
+            List<User> loadedUsers = getGson().fromJson(reader, userListType);
 
-            if (users == null) {
+            if (loadedUsers != null) {
+                users = loadedUsers;
+                System.out.println("✅ Users loaded successfully from: " + file.getAbsolutePath());
+            } else {
                 users = new ArrayList<>();
+                System.out.println("⚠️ No users found in file, starting with empty list.");
             }
 
             // Update next user ID
@@ -95,13 +134,25 @@ public class UserService {
                     .orElse(0L);
             User.setNextId(maxId + 1);
 
-            System.out.println("✅ Users loaded successfully from: " + file.getAbsolutePath());
-        } catch (IOException e) {
+        } catch (Exception e) {
             System.out.println("❌ Failed to load users: " + e.getMessage());
+            System.out.println("🔄 Starting with empty user list. If this persists, try deleting the data/users.json file.");
+
+            // If there's corruption, backup the file and start fresh
+            try {
+                File backupFile = new File(filename + ".backup");
+                if (file.renameTo(backupFile)) {
+                    System.out.println("📁 Corrupted file backed up to: " + backupFile.getAbsolutePath());
+                }
+            } catch (Exception backupException) {
+                System.out.println("⚠️ Could not backup corrupted file: " + backupException.getMessage());
+            }
+
+            users = new ArrayList<>();
         }
     }
 
-    //  .............................................................................................
+    // .............................................................................................
 
     /**
      * Register a new user
@@ -116,7 +167,7 @@ public class UserService {
         saveUsersToFile(); // Persist users
     }
 
-    //  .............................................................................................
+    // .............................................................................................
 
     /**
      * Get all registered users
@@ -128,7 +179,7 @@ public class UserService {
         return users;
     }
 
-    //  .............................................................................................
+    // .............................................................................................
 
     /**
      * Find a user by ID
@@ -140,7 +191,7 @@ public class UserService {
                 .orElse(null);
     }
 
-    //  .............................................................................................
+    // .............................................................................................
 
     /**
      * Find a user by email
@@ -152,7 +203,7 @@ public class UserService {
                 .orElse(null);
     }
 
-    //  .............................................................................................
+    // .............................................................................................
 
     /**
      * Update existing user
@@ -162,15 +213,20 @@ public class UserService {
         if (foundUser != null) {
             foundUser.setName(updatedUser.getName());
             foundUser.setEmail(updatedUser.getEmail());
-            foundUser.setPassword(updatedUser.getPassword());
-            foundUser.setRoles(updatedUser.getRoles());
+            // Only update password if it's provided and different
+            if (updatedUser.getPassword() != null && !updatedUser.getPassword().isEmpty()) {
+                foundUser.setPassword(updatedUser.getPassword());
+            }
+            if (updatedUser.getRoles() != null) {
+                foundUser.setRoles(updatedUser.getRoles());
+            }
             saveUsersToFile();
         } else {
             System.out.println("User with id " + id + " not found.");
         }
     }
 
-    //  .............................................................................................
+    // .............................................................................................
 
     /**
      * Delete a user by ID
@@ -180,7 +236,7 @@ public class UserService {
         saveUsersToFile();
     }
 
-    //  .............................................................................................
+    // .............................................................................................
 
     /**
      * Validate username (2-30 chars, starts with uppercase)
@@ -193,7 +249,7 @@ public class UserService {
         return name.matches("^[A-Z][a-zA-Z]*(?:[ '-][a-zA-Z]+)*$");
     }
 
-    //  .............................................................................................
+    // .............................................................................................
 
     /**
      * Validate email format
@@ -204,7 +260,7 @@ public class UserService {
         return email.matches(emailRegex);
     }
 
-    //  .............................................................................................
+    // .............................................................................................
 
     /**
      * Validate password
@@ -215,7 +271,7 @@ public class UserService {
         return password.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*])[A-Za-z\\d!@#$%^&*]{8,20}$");
     }
 
-    //  .............................................................................................
+    // .............................................................................................
 
     /**
      * Check if email is already taken
@@ -228,5 +284,4 @@ public class UserService {
         }
         return false; // Email is free
     }
-
 }
