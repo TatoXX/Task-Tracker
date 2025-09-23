@@ -11,6 +11,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import jakarta.servlet.http.HttpSession;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
 
 @Controller
@@ -21,7 +22,11 @@ public class TaskController {
     private TaskService taskService;
 
     @GetMapping
-    public String showTaskManagement(HttpSession session, Model model) {
+    public String showTaskManagement(@RequestParam(required = false) String search,
+                                     @RequestParam(required = false) String priority,
+                                     @RequestParam(required = false) String sortBy,
+                                     HttpSession session, Model model) {
+
         User loggedUser = (User) session.getAttribute("user");
         if (loggedUser == null) {
             return "redirect:/login";
@@ -30,16 +35,63 @@ public class TaskController {
         // Get all tasks for the user
         List<Task> userTasks = taskService.getTasksByUser(loggedUser);
 
-        model.addAttribute("user", loggedUser);
+        // Filter by priority if provided
+        if (priority != null && !priority.isEmpty()) {
+            userTasks.removeIf(task -> task.getPriority() == null || !task.getPriority().equalsIgnoreCase(priority));
+        }
+
+        // Filter by search term if provided
+        if (search != null && !search.isEmpty()) {
+            String lowerSearch = search.toLowerCase();
+            userTasks.removeIf(task ->
+                    (task.getTitle() == null || !task.getTitle().toLowerCase().contains(lowerSearch)) &&
+                            (task.getDescription() == null || !task.getDescription().toLowerCase().contains(lowerSearch))
+            );
+        }
+
+        // Sorting
+        if (sortBy != null) {
+            switch (sortBy) {
+                case "title":
+                    userTasks.sort(Comparator.comparing(Task::getTitle, String.CASE_INSENSITIVE_ORDER));
+                    break;
+                case "priority":
+                    userTasks.sort(Comparator.comparingInt(task -> {
+                        if ("high".equalsIgnoreCase(task.getPriority())) return 1;
+                        if ("medium".equalsIgnoreCase(task.getPriority())) return 2;
+                        if ("low".equalsIgnoreCase(task.getPriority())) return 3;
+                        return 4; // default for null or unknown
+                    }));
+                    break;
+                case "due_date":
+                    userTasks.sort(Comparator.comparing(Task::getDueDate, Comparator.nullsLast(LocalDate::compareTo)));
+                    break;
+                case "created":
+                default:
+                    userTasks.sort(Comparator.comparing(
+                            task -> task.getCreatedAt(),
+                            Comparator.nullsLast(Comparator.naturalOrder())
+                    ));
+            }
+        }
+
+        // Pass filtered tasks to view
         model.addAttribute("tasks", userTasks);
+        model.addAttribute("search", search);
+        model.addAttribute("priority", priority);
+        model.addAttribute("sortBy", sortBy);
 
-        // Add task statistics
-        model.addAttribute("totalTasks", taskService.getTotalTasksByUser(loggedUser));
-        model.addAttribute("completedTasks", taskService.getCompletedTasksByUser(loggedUser));
-        model.addAttribute("pendingTasks", taskService.getPendingTasksByUser(loggedUser));
-        model.addAttribute("inProgressTasks", taskService.getInProgressTasksByUser(loggedUser));
+        // --- COUNTS FOR THYMELEAF ---
+        long completedCount = userTasks.stream().filter(Task::isCompleted).count();
+        long inProgressCount = userTasks.stream().filter(Task::isInProgress).count();
+        long todoCount = userTasks.stream().filter(t -> !t.isCompleted() && !t.isInProgress()).count();
 
-        // Add empty projects list for now (you can implement this later)
+        model.addAttribute("completedCount", completedCount);
+        model.addAttribute("inProgressCount", inProgressCount);
+        model.addAttribute("todoCount", todoCount);
+        // ----------------------------
+
+        // Projects list (empty for now)
         model.addAttribute("projects", List.of());
 
         return "task/task-management";
@@ -61,12 +113,10 @@ public class TaskController {
         try {
             Task task = new Task(title, description, loggedUser);
 
-            // Set priority (default to low if not provided)
             if (priority != null && !priority.isEmpty()) {
                 task.setPriority(priority);
             }
 
-            // Set due date if provided
             if (dueDate != null && !dueDate.isEmpty()) {
                 try {
                     task.setDueDate(LocalDate.parse(dueDate));
@@ -98,7 +148,7 @@ public class TaskController {
         }
 
         try {
-            Task task = taskService.findTaskById(id,loggedUser);
+            Task task = taskService.findTaskById(id, loggedUser);
             if (task != null && task.getUser().getId().equals(loggedUser.getId())) {
                 switch (status.toLowerCase()) {
                     case "todo":
@@ -127,6 +177,7 @@ public class TaskController {
         return "redirect:/tasks";
     }
 
+    // --- REST OF THE CONTROLLER REMAINS UNCHANGED ---
     @GetMapping("/edit/{id}")
     public String editTaskForm(@PathVariable Long id, HttpSession session, Model model) {
         User loggedUser = (User) session.getAttribute("user");
@@ -134,7 +185,7 @@ public class TaskController {
             return "redirect:/login";
         }
 
-        Task task = taskService.findTaskById(id,loggedUser);
+        Task task = taskService.findTaskById(id, loggedUser);
         if (task != null && task.getUser().getId().equals(loggedUser.getId())) {
             model.addAttribute("task", task);
             model.addAttribute("user", loggedUser);
@@ -159,7 +210,7 @@ public class TaskController {
         }
 
         try {
-            Task task = taskService.findTaskById(id,loggedUser);
+            Task task = taskService.findTaskById(id, loggedUser);
             if (task != null && task.getUser().getId().equals(loggedUser.getId())) {
                 task.setTitle(title);
                 task.setDescription(description);
@@ -222,7 +273,6 @@ public class TaskController {
         return deleteTask(id, session, redirectAttributes);
     }
 
-    // API endpoints for AJAX calls (if needed)
     @PostMapping("/toggle/{id}")
     @ResponseBody
     public String toggleTask(@PathVariable Long id, HttpSession session) {
@@ -232,7 +282,7 @@ public class TaskController {
         }
 
         try {
-            Task task = taskService.findTaskById(id,loggedUser);
+            Task task = taskService.findTaskById(id, loggedUser);
             if (task != null && task.getUser().getId().equals(loggedUser.getId())) {
                 task.setCompleted(!task.isCompleted());
                 taskService.saveTasksToFile();
@@ -244,7 +294,6 @@ public class TaskController {
         return "error";
     }
 
-    // Keep your existing method for compatibility
     @PostMapping("/tasks")
     public String createTask(@RequestParam String title,
                              @RequestParam String description,
@@ -259,7 +308,6 @@ public class TaskController {
         return "redirect:/tasks";
     }
 
-    // Keep your existing method for compatibility
     @GetMapping("/all")
     @ResponseBody
     public List<Task> getTasks() {
